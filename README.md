@@ -1,44 +1,149 @@
-<!-- 
-[![PyPI](https://img.shields.io/pypi/v/llama-cpp-haystack)](https://pypi.org/project/llama-cpp-haystack/) 
-![PyPI - Downloads](https://img.shields.io/pypi/dm/llama-cpp-haystack?color=blue&logo=pypi&logoColor=gold) 
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/llama-cpp-haystack?logo=python&logoColor=gold) 
+<!--
+[![PyPI](https://img.shields.io/pypi/v/llama-cpp-haystack)](https://pypi.org/project/llama-cpp-haystack/)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/llama-cpp-haystack?color=blue&logo=pypi&logoColor=gold)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/llama-cpp-haystack?logo=python&logoColor=gold)
 -->
-[![GitHub](https://img.shields.io/github/license/awinml/llama-cpp-haystack?color=green)](LICENSE) 
+
+[![GitHub](https://img.shields.io/github/license/awinml/llama-cpp-haystack?color=green)](LICENSE)
 [![Actions status](https://github.com/awinml/llama-cpp-haystack/workflows/Test/badge.svg)](https://github.com/awinml/llama-cpp-haystack/actions)
 [![Coverage Status](https://coveralls.io/repos/github/awinml/llama-cpp-haystack/badge.svg?branch=main)](https://coveralls.io/github/awinml/llama-cpp-haystack?branch=main)
-[![Types - Mypy](https://img.shields.io/badge/types-Mypy-blue.svg)](https://github.com/python/mypy) 
+[![Types - Mypy](https://img.shields.io/badge/types-Mypy-blue.svg)](https://github.com/python/mypy)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Code Style - Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) 
+[![Code Style - Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-
-
-<h1 align="center"> <a href="https://github.com/awinml/llama-cpp-haystack"> Llama.cpp - Haystack </a> </h1>
+<h1 align="center"> <a href="https://github.com/awinml/llama-cpp-haystack"> Llama.cpp Integration - Haystack </a> </h1>
 
 Custom component for [Haystack](https://github.com/deepset-ai/haystack) (2.x) for running LLMs using the [Llama.cpp](https://github.com/ggerganov/llama.cpp) LLM framework. This implementation leverages the [Python Bindings for llama.cpp](https://github.com/abetlen/llama-cpp-python).
 
-<!-- 
 #### What's New
 
-- **[v0.0.1 - 04/01/24]:** Added `LlamaCppGenerator` to run LLMs using llama.cpp.
--->
+- **[v0.0.1 - 05/01/24]:** Added `LlamaCppGenerator` to run LLMs using llama.cpp for text generation.
 
 ## Installation
 
 ```bash
 pip install git+https://github.com/awinml/llama-cpp-haystack.git@main#egg=llama-cpp-haystack
 ```
-<!-- 
+
 ## Usage
 
+You can utilize the [`LlamaCppGenerator`](https://github.com/awinml/llama-cpp-haystack/blob/main/src/llama_cpp_haystack/generator.py) to load models quantized using llama.cpp (GGUF) for text generation.
+
+Information about the supported models and model parameters can be found on the llama.cpp [documentation](https://llama-cpp-python.readthedocs.io/en/latest).
+
+The GGUF versions of popular models can be downloaded from [HuggingFace](https://huggingface.co/models?library=gguf).
 
 ## Example
+
+Below is the example Retrieval Augmented Generation pipeline that uses the [Simple Wikipedia](https://huggingface.co/datasets/pszemraj/simple_wikipedia) Dataset from HuggingFace. You can find more examples in the [`examples`](https://github.com/awinml/llama-cpp-haystack/tree/main/examples) folder.
+
+
+Load the dataset:
+
+```python
+# Install HuggingFace Datasets using "pip install datasets"
+from datasets import load_dataset
+from haystack import Document, Pipeline
+from haystack.components.builders.answer_builder import AnswerBuilder
+from haystack.components.builders.prompt_builder import PromptBuilder
+from haystack.components.embedders import SentenceTransformersDocumentEmbedder, SentenceTransformersTextEmbedder
+from haystack.components.retrievers import InMemoryEmbeddingRetriever
+from haystack.components.writers import DocumentWriter
+from haystack.document_stores import InMemoryDocumentStore
+
+# Import LlamaCppGenerator
+from llama_cpp_haystack import LlamaCppGenerator
+
+# Load first 100 rows of the Simple Wikipedia Dataset from HuggingFace
+dataset = load_dataset("pszemraj/simple_wikipedia", split="validation[:100]")
+
+docs = [
+    Document(
+        content=doc["text"],
+        meta={
+            "title": doc["title"],
+            "url": doc["url"],
+        },
+    )
+    for doc in dataset
+]
+```
+
+Index the documents to the `InMemoryDocumentStore` using the `SentenceTransformersDocumentEmbedder` and `DocumentWriter`:
+
+```python
+doc_store = InMemoryDocumentStore(embedding_similarity_function="cosine")
+doc_embedder = SentenceTransformersDocumentEmbedder(model_name_or_path="sentence-transformers/all-MiniLM-L6-v2")
+
+# Indexing Pipeline
+indexing_pipeline = Pipeline()
+indexing_pipeline.add_component(instance=doc_embedder, name="DocEmbedder")
+indexing_pipeline.add_component(instance=DocumentWriter(document_store=doc_store), name="DocWriter")
+indexing_pipeline.connect(connect_from="DocEmbedder", connect_to="DocWriter")
+
+indexing_pipeline.run({"DocEmbedder": {"documents": docs}})
+```
+
+Create the Retrieval Augmented Generation (RAG) pipeline and add the `LlamaCppGenerator` to it:
+
+```python
+# Prompt Template for the https://huggingface.co/openchat/openchat-3.5-1210 LLM
+prompt_template = """GPT4 Correct User: Answer the question using the provided context.
+Question: {{question}}
+Context:
+{% for doc in documents %}
+    {{ doc.content }}
+{% endfor %}
+<|end_of_turn|>
+GPT4 Correct Assistant:
+"""
+
+rag_pipeline = Pipeline()
+
+text_embedder = SentenceTransformersTextEmbedder(model_name_or_path="sentence-transformers/all-MiniLM-L6-v2")
+
+# Load the LLM using LlamaCppGenerator
+model_path = "openchat-3.5-1210.Q3_K_S.gguf"
+generator = LlamaCppGenerator(model_path=model_path, n_ctx=4096, n_batch=128)
+
+rag_pipeline.add_component(
+    instance=text_embedder,
+    name="text_embedder",
+)
+rag_pipeline.add_component(instance=InMemoryEmbeddingRetriever(document_store=doc_store, top_k=3), name="retriever")
+rag_pipeline.add_component(instance=PromptBuilder(template=prompt_template), name="prompt_builder")
+rag_pipeline.add_component(instance=generator, name="llm")
+rag_pipeline.add_component(instance=AnswerBuilder(), name="answer_builder")
+
+rag_pipeline.connect("text_embedder", "retriever")
+rag_pipeline.connect("retriever", "prompt_builder.documents")
+rag_pipeline.connect("prompt_builder", "llm")
+rag_pipeline.connect("llm.replies", "answer_builder.replies")
+rag_pipeline.connect("retriever", "answer_builder.documents")
+```
+
+Run the pipeline:
+
+```python
+question = "Which year did the Joker movie release?"
+result = rag_pipeline.run(
+    {
+        "text_embedder": {"text": question},
+        "prompt_builder": {"question": question},
+        "llm": {"generation_kwargs": {"max_tokens": 128, "temperature": 0.1}},
+        "answer_builder": {"query": question},
+    }
+)
+
+generated_answer = result["answer_builder"]["answers"][0]
+print(generated_answer.data)
+# The Joker movie was released on October 4, 2019.
+```
 
 
 ## Contributing
 
-Pull requests are welcome. For major changes, please open an issue first
-to discuss what you would like to change.
--->
+Pull requests are welcome. For significant changes, kindly open an issue to discuss proposed modifications beforehand.
 
 ## Author
 
