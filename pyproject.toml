@@ -180,6 +180,7 @@ exclude_lines = [
 
 [tool.pytest.ini_options]
 minversion = "6.0"
+addopts = "-vv"
 markers = [
   "unit: unit tests",
   "integration: integration tests"
