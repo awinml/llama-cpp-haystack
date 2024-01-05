@@ -32,8 +32,10 @@ def download_file(file_link, filename, capsys):
 class TestLlamaCppGenerator:
     @pytest.fixture
     def generator(self, model_path, capsys):
-        ggml_model_path = "https://huggingface.co/TheBloke/phi-2-GGUF/resolve/main/phi-2.Q3_K_S.gguf"
-        filename = "phi-2.Q3_K_S.gguf"
+        ggml_model_path = (
+            "https://huggingface.co/TheBloke/openchat-3.5-1210-GGUF/resolve/main/openchat-3.5-1210.Q3_K_S.gguf"
+        )
+        filename = "openchat-3.5-1210.Q3_K_S.gguf"
 
         # Download GGUF model from HuggingFace
         download_file(ggml_model_path, str(model_path / filename), capsys)
@@ -78,41 +80,41 @@ class TestLlamaCppGenerator:
         assert generator.model_kwargs == {"model_path": "test_model.gguf", "n_ctx": 2048, "n_batch": 512}
         assert generator.generation_kwargs == {}
 
-    def test_ignores_model_path_if_specified_in_model_kwargs(self, model_path):
+    def test_ignores_model_path_if_specified_in_model_kwargs(self):
         """
         Test that model_path is ignored if already specified in model_kwargs.
         """
         generator = LlamaCppGenerator(
-            model_path=str(model_path / "phi-2.Q3_K_S.gguf"),
+            model_path="test_model.gguf",
             n_ctx=512,
             n_batch=512,
             model_kwargs={"model_path": "other_model.gguf"},
         )
         assert generator.model_kwargs["model_path"] == "other_model.gguf"
 
-    def test_ignores_n_ctx_if_specified_in_model_kwargs(self, model_path):
+    def test_ignores_n_ctx_if_specified_in_model_kwargs(self):
         """
         Test that n_ctx is ignored if already specified in model_kwargs.
         """
         generator = LlamaCppGenerator(
-            model_path=str(model_path / "phi-2.Q3_K_S.gguf"), n_ctx=512, n_batch=512, model_kwargs={"n_ctx": 1024}
+            model_path="test_model.gguf", n_ctx=512, n_batch=512, model_kwargs={"n_ctx": 1024}
         )
         assert generator.model_kwargs["n_ctx"] == 1024
 
-    def test_ignores_n_batch_if_specified_in_model_kwargs(self, model_path):
+    def test_ignores_n_batch_if_specified_in_model_kwargs(self):
         """
         Test that n_batch is ignored if already specified in model_kwargs.
         """
         generator = LlamaCppGenerator(
-            model_path=str(model_path / "phi-2.Q3_K_S.gguf"), n_ctx=512, n_batch=512, model_kwargs={"n_batch": 1024}
+            model_path="test_model.gguf", n_ctx=512, n_batch=512, model_kwargs={"n_batch": 1024}
         )
         assert generator.model_kwargs["n_batch"] == 1024
 
-    def test_raises_error_without_warm_up(self, model_path):
+    def test_raises_error_without_warm_up(self):
         """
         Test that the generator raises an error if warm_up() is not called before running.
         """
-        generator = LlamaCppGenerator(model_path=str(model_path / "phi-2.Q3_K_S.gguf"), n_ctx=512, n_batch=512)
+        generator = LlamaCppGenerator(model_path="test_model.gguf", n_ctx=512, n_batch=512)
         with pytest.raises(RuntimeError):
             generator.run("What is the capital of China?")
 
@@ -165,7 +167,7 @@ class TestLlamaCppGenerator:
         ]
 
         for question, answer in questions_and_answers:
-            prompt = f"""Instruct: Answer in a single word. {question} \n Output:"""
+            prompt = f"GPT4 Correct User: Answer in a single word. {question} <|end_of_turn|>\n GPT4 Correct Assistant:"
             result = generator.run(prompt)
 
             assert "replies" in result
@@ -178,12 +180,13 @@ class TestLlamaCppGenerator:
         """
         Test that a valid prompt returns a list of replies.
         """
-        prompt_template = """Instruct:
+        prompt_template = """GPT4 Correct User: Answer the question in a single word. {{question}}
+        Context:
         {% for doc in documents %}
             {{ doc.content }}
         {% endfor %}
-        Answer the question in a single word. {{question}}
-        \nOutput:
+        <|end_of_turn|>
+        GPT4 Correct Assistant:
         """
         rag_pipeline = Pipeline()
         rag_pipeline.add_component(
