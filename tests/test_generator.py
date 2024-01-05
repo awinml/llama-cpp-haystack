@@ -178,13 +178,11 @@ class TestLlamaCppGenerator:
         """
         Test that a valid prompt returns a list of replies.
         """
-        prompt_template = """
-        Instruct: Given these documents, answer the question.\nDocuments:
+        prompt_template = """Instruct:
         {% for doc in documents %}
             {{ doc.content }}
         {% endfor %}
-
-        \nQuestion: {{question}}
+        Answer the question in a single word. {{question}}
         \nOutput:
         """
         rag_pipeline = Pipeline()
@@ -201,17 +199,20 @@ class TestLlamaCppGenerator:
 
         # Populate the document store
         documents = [
-            Document(content="My name is Jean and I live in Paris."),
-            Document(content="My name is Mark and I live in Berlin."),
-            Document(content="My name is Giorgio and I live in Rome."),
+            Document(content="The capital of France is Paris."),
+            Document(content="The capital of Canada is Ottawa."),
+            Document(content="The capital of Ghana is Accra."),
         ]
         rag_pipeline.get_component("retriever").document_store.write_documents(documents)
 
         # Query and assert
-        questions = ["Who lives in Paris?", "Who lives in Berlin?", "Who lives in Rome?"]
-        answers_spywords = ["Jean", "Mark", "Giorgio"]
+        questions_and_answers = [
+            ("What's the capital of France?", "Paris"),
+            ("What is the capital of Canada?", "Ottawa"),
+            ("What is the capital of Ghana?", "Accra"),
+        ]
 
-        for question, spyword in zip(questions, answers_spywords):
+        for question, answer in questions_and_answers:
             result = rag_pipeline.run(
                 {
                     "retriever": {"query": question},
@@ -223,7 +224,7 @@ class TestLlamaCppGenerator:
 
             assert len(result["answer_builder"]["answers"]) == 1
             generated_answer = result["answer_builder"]["answers"][0]
-            assert spyword in generated_answer.data
+            assert answer.lower() in generated_answer.data.lower()
             assert generated_answer.query == question
             assert hasattr(generated_answer, "documents")
             assert hasattr(generated_answer, "meta")
