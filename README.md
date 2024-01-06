@@ -60,7 +60,10 @@ For example, to offload the model to GPU during initialization:
 from llama_cpp_haystack import LlamaCppGenerator
 
 generator = LlamaCppGenerator(
-    model_path="/content/openchat-3.5-1210.Q3_K_S.gguf", n_ctx=512, n_batch=128, model_kwargs={"n_gpu_layers": -1}
+    model_path="/content/openchat-3.5-1210.Q3_K_S.gguf", 
+    n_ctx=512,
+    n_batch=128,
+    model_kwargs={"n_gpu_layers": -1}
 )
 generator.warm_up()
 
