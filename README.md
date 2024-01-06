@@ -25,6 +25,19 @@ Custom component for [Haystack](https://github.com/deepset-ai/haystack) (2.x) fo
 pip install git+https://github.com/awinml/llama-cpp-haystack.git@main#egg=llama-cpp-haystack
 ```
 
+The default install behaviour is to build `llama.cpp` for CPU only on Linux and Windows and use Metal on MacOS.
+
+To install using the other backends, first install [llama-cpp-python](https://github.com/abetlen/llama-cpp-python) using the instructions on their [installation documentation](https://github.com/abetlen/llama-cpp-python#installation) and then install [llama-cpp-haystack](https://github.com/awinml/llama-cpp-haystack).
+
+
+For example, to use `llama-cpp-haystack` with the cuBLAS backend:
+
+```bash
+export LLAMA_CUBLAS=1
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
+pip install git+https://github.com/awinml/llama-cpp-haystack.git@main#egg=llama-cpp-haystack
+```
+
 ## Usage
 
 You can utilize the [`LlamaCppGenerator`](https://github.com/awinml/llama-cpp-haystack/blob/main/src/llama_cpp_haystack/generator.py) to load models quantized using llama.cpp (GGUF) for text generation.
@@ -32,6 +45,83 @@ You can utilize the [`LlamaCppGenerator`](https://github.com/awinml/llama-cpp-ha
 Information about the supported models and model parameters can be found on the llama.cpp [documentation](https://llama-cpp-python.readthedocs.io/en/latest).
 
 The GGUF versions of popular models can be downloaded from [HuggingFace](https://huggingface.co/models?library=gguf).
+
+### Passing additional model parameters
+
+The `model_path`, `n_ctx`, `n_batch` arguments have been exposed for convenience and can be directly passed to the Generator during initialization as keyword arguments.  
+
+The `model_kwargs` parameter can be used to pass additional arguments when initializing the model. In case of duplication, these kwargs override `model_path`, `n_ctx`, and `n_batch` init parameters.
+
+See Llama.cpp's [model documentation](https://llama-cpp-python.readthedocs.io/en/latest/api-reference/#llama_cpp.Llama.__init__) for more information on the available model arguments.
+
+For example, to offload the model to GPU during initialization:
+
+```python
+from llama_cpp_haystack import LlamaCppGenerator
+
+generator = LlamaCppGenerator(
+    model_path="/content/openchat-3.5-1210.Q3_K_S.gguf", n_ctx=512, n_batch=128, model_kwargs={"n_gpu_layers": -1}
+)
+generator.warm_up()
+
+input = "Who is the best American actor?"
+prompt = f"GPT4 Correct User: {input} <|end_of_turn|> GPT4 Correct Assistant:"
+
+result = generator.run(prompt, generation_kwargs={"max_tokens": 128})
+generated_text = result["replies"][0]
+
+print(generated_text)
+```
+### Passing generation parameters
+
+The `generation_kwargs` parameter can be used to pass additional generation arguments like `max_tokens`, `temperature`, `top_k`, `top_p`, etc to the model during inference. 
+
+See Llama.cpp's [`create_completion` documentation](https://llama-cpp-python.readthedocs.io/en/latest/api-reference/#llama_cpp.Llama.create_completion) for more information on the available generation arguments.
+
+For example, to set the `max_tokens` and `temperature`:
+
+```python
+from llama_cpp_haystack import LlamaCppGenerator
+
+generator = LlamaCppGenerator(
+    model_path="/content/openchat-3.5-1210.Q3_K_S.gguf",
+    n_ctx=512,
+    n_batch=128,
+    generation_kwargs={"max_tokens": 128, "temperature": 0.1},
+)
+generator.warm_up()
+
+input = "Who is the best American actor?"
+prompt = f"GPT4 Correct User: {input} <|end_of_turn|> GPT4 Correct Assistant:"
+
+result = generator.run(prompt)
+generated_text = result["replies"][0]
+
+print(generated_text)
+```
+The `generation_kwargs` can also be passed to the `run` method of the generator directly:
+
+```python
+from llama_cpp_haystack import LlamaCppGenerator
+
+generator = LlamaCppGenerator(
+    model_path="/content/openchat-3.5-1210.Q3_K_S.gguf",
+    n_ctx=512,
+    n_batch=128,
+)
+generator.warm_up()
+
+input = "Who is the best American actor?"
+prompt = f"GPT4 Correct User: {input} <|end_of_turn|> GPT4 Correct Assistant:"
+
+result = generator.run(
+    prompt,
+    generation_kwargs={"max_tokens": 128, "temperature": 0.1},
+)
+generated_text = result["replies"][0]
+
+print(generated_text)
+```
 
 ## Example
 
